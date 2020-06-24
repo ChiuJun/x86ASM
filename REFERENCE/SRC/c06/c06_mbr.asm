@@ -10,7 +10,7 @@
   number db 0,0,0,0,0
   
   start:
-         mov ax,0x7c0                  ;设置数据段基地址 
+         mov ax,0x07c0                  ;设置数据段基地址 
          mov ds,ax
          
          mov ax,0xb800                 ;设置附加段基地址 
