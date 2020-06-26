@@ -1,0 +1,312 @@
+     1                                           ;代码清单9-1
+     2                                           ;文件名：c09_1.asm
+     3                                           ;文件说明：用户程序 
+     4                                           ;创建日期：2011-4-16 22:03
+     5                                           
+     6                                  ;===============================================================================
+     7                                  SECTION header vstart=0                     ;定义用户程序头部段 
+     8 00000000 [00000000]                  program_length  dd program_end          ;程序总长度[0x00]
+     9                                      
+    10                                      ;用户程序入口点
+    11 00000004 [8D00]                      code_entry      dw start                ;偏移地址[0x04]
+    12 00000006 [00000000]                                  dd section.code.start   ;段地址[0x06] 
+    13                                      
+    14 0000000A 0300                        realloc_tbl_len dw (header_end-realloc_begin)/4
+    15                                                                              ;段重定位表项个数[0x0a]
+    16                                      
+    17                                      realloc_begin:
+    18                                      ;段重定位表           
+    19 0000000C [00000000]                  code_segment    dd section.code.start   ;[0x0c]
+    20 00000010 [00000000]                  data_segment    dd section.data.start   ;[0x14]
+    21 00000014 [00000000]                  stack_segment   dd section.stack.start  ;[0x1c]
+    22                                      
+    23                                  header_end:                
+    24                                      
+    25                                  ;===============================================================================
+    26                                  SECTION code align=16 vstart=0           ;定义代码段（16字节对齐） 
+    27                                  new_int_0x70:
+    28 00000000 50                            push ax
+    29 00000001 53                            push bx
+    30 00000002 51                            push cx
+    31 00000003 52                            push dx
+    32 00000004 06                            push es
+    33                                        
+    34                                    .w0:                                    
+    35 00000005 B00A                          mov al,0x0a                        ;阻断NMI。当然，通常是不必要的
+    36 00000007 0C80                          or al,0x80                          
+    37 00000009 E670                          out 0x70,al
+    38 0000000B E471                          in al,0x71                         ;读寄存器A
+    39 0000000D A880                          test al,0x80                       ;测试第7位UIP 
+    40 0000000F 75F4                          jnz .w0                            ;以上代码对于更新周期结束中断来说 
+    41                                                                           ;是不必要的 
+    42 00000011 30C0                          xor al,al
+    43 00000013 0C80                          or al,0x80
+    44 00000015 E670                          out 0x70,al
+    45 00000017 E471                          in al,0x71                         ;读RTC当前时间(秒)
+    46 00000019 50                            push ax
+    47                                  
+    48 0000001A B002                          mov al,2
+    49 0000001C 0C80                          or al,0x80
+    50 0000001E E670                          out 0x70,al
+    51 00000020 E471                          in al,0x71                         ;读RTC当前时间(分)
+    52 00000022 50                            push ax
+    53                                  
+    54 00000023 B004                          mov al,4
+    55 00000025 0C80                          or al,0x80
+    56 00000027 E670                          out 0x70,al
+    57 00000029 E471                          in al,0x71                         ;读RTC当前时间(时)
+    58 0000002B 50                            push ax
+    59                                  
+    60 0000002C B00C                          mov al,0x0c                        ;寄存器C的索引。且开放NMI 
+    61 0000002E E670                          out 0x70,al
+    62 00000030 E471                          in al,0x71                         ;读一下RTC的寄存器C，否则只发生一次中断
+    63                                                                           ;此处不考虑闹钟和周期性中断的情况 
+    64 00000032 B800B8                        mov ax,0xb800
+    65 00000035 8EC0                          mov es,ax
+    66                                  
+    67 00000037 58                            pop ax
+    68 00000038 E84200                        call bcd_to_ascii
+    69 0000003B BBC807                        mov bx,12*160 + 36*2               ;从屏幕上的12行36列开始显示
+    70                                  
+    71 0000003E 268827                        mov [es:bx],ah
+    72 00000041 26884702                      mov [es:bx+2],al                   ;显示两位小时数字
+    73                                  
+    74 00000045 B03A                          mov al,':'
+    75 00000047 26884704                      mov [es:bx+4],al                   ;显示分隔符':'
+    76 0000004B 26F65705                      not byte [es:bx+5]                 ;反转显示属性 
+    77                                  
+    78 0000004F 58                            pop ax
+    79 00000050 E82A00                        call bcd_to_ascii
+    80 00000053 26886706                      mov [es:bx+6],ah
+    81 00000057 26884708                      mov [es:bx+8],al                   ;显示两位分钟数字
+    82                                  
+    83 0000005B B03A                          mov al,':'
+    84 0000005D 2688470A                      mov [es:bx+10],al                  ;显示分隔符':'
+    85 00000061 26F6570B                      not byte [es:bx+11]                ;反转显示属性
+    86                                  
+    87 00000065 58                            pop ax
+    88 00000066 E81400                        call bcd_to_ascii
+    89 00000069 2688670C                      mov [es:bx+12],ah
+    90 0000006D 2688470E                      mov [es:bx+14],al                  ;显示两位小时数字
+    91                                        
+    92 00000071 B020                          mov al,0x20                        ;中断结束命令EOI 
+    93 00000073 E6A0                          out 0xa0,al                        ;向从片发送 
+    94 00000075 E620                          out 0x20,al                        ;向主片发送 
+    95                                  
+    96 00000077 07                            pop es
+    97 00000078 5A                            pop dx
+    98 00000079 59                            pop cx
+    99 0000007A 5B                            pop bx
+   100 0000007B 58                            pop ax
+   101                                  
+   102 0000007C CF                            iret
+   103                                  
+   104                                  ;-------------------------------------------------------------------------------
+   105                                  bcd_to_ascii:                            ;BCD码转ASCII
+   106                                                                           ;输入：AL=bcd码
+   107                                                                           ;输出：AX=ascii
+   108 0000007D 88C4                          mov ah,al                          ;分拆成两个数字 
+   109 0000007F 240F                          and al,0x0f                        ;仅保留低4位 
+   110 00000081 0430                          add al,0x30                        ;转换成ASCII 
+   111                                  
+   112 00000083 C0EC04                        shr ah,4                           ;逻辑右移4位 
+   113 00000086 80E40F                        and ah,0x0f                        
+   114 00000089 80C430                        add ah,0x30
+   115                                  
+   116 0000008C C3                            ret
+   117                                  
+   118                                  ;-------------------------------------------------------------------------------
+   119                                  start:
+   120 0000008D A1[1400]                      mov ax,[stack_segment]
+   121 00000090 8ED0                          mov ss,ax
+   122 00000092 BC[0001]                      mov sp,ss_pointer
+   123 00000095 A1[1000]                      mov ax,[data_segment]
+   124 00000098 8ED8                          mov ds,ax
+   125                                        
+   126 0000009A BB[0000]                      mov bx,init_msg                    ;显示初始信息 
+   127 0000009D E85500                        call put_string
+   128                                  
+   129 000000A0 BB[0E00]                      mov bx,inst_msg                    ;显示安装信息 
+   130 000000A3 E84F00                        call put_string
+   131                                        
+   132 000000A6 B070                          mov al,0x70
+   133 000000A8 B304                          mov bl,4
+   134 000000AA F6E3                          mul bl                             ;计算0x70号中断在IVT中的偏移
+   135 000000AC 89C3                          mov bx,ax                          
+   136                                  
+   137 000000AE FA                            cli                                ;防止改动期间发生新的0x70号中断
+   138                                  
+   139 000000AF 06                            push es
+   140 000000B0 B80000                        mov ax,0x0000
+   141 000000B3 8EC0                          mov es,ax
+   142 000000B5 26C707[0000]                  mov word [es:bx],new_int_0x70      ;偏移地址。
+   143                                                                            
+   144 000000BA 268C4F02                      mov word [es:bx+2],cs              ;段地址
+   145 000000BE 07                            pop es
+   146                                  
+   147 000000BF B00B                          mov al,0x0b                        ;RTC寄存器B
+   148 000000C1 0C80                          or al,0x80                         ;阻断NMI 
+   149 000000C3 E670                          out 0x70,al
+   150 000000C5 B012                          mov al,0x12                        ;设置寄存器B，禁止周期性中断，开放更 
+   151 000000C7 E671                          out 0x71,al                        ;新结束后中断，BCD码，24小时制 
+   152                                  
+   153 000000C9 B00C                          mov al,0x0c
+   154 000000CB E670                          out 0x70,al
+   155 000000CD E471                          in al,0x71                         ;读RTC寄存器C，复位未决的中断状态
+   156                                        
+   157 000000CF B0FB                          mov al,0xfb                        ;屏蔽8259中除RTC外的中断
+   158 000000D1 E621                          out 0x21,al
+   159 000000D3 B0FE                          mov al,0xfe                        
+   160 000000D5 E6A1                          out 0xa1,al                        
+   161                                  
+   162 000000D7 FB                            sti                                ;重新开放中断 
+   163                                  
+   164 000000D8 BB[3000]                      mov bx,done_msg                    ;显示安装完成信息 
+   165 000000DB E81700                        call put_string
+   166                                  
+   167 000000DE BB[3800]                      mov bx,tips_msg                    ;显示提示信息
+   168 000000E1 E81100                        call put_string
+   169                                        
+   170 000000E4 B900B8                        mov cx,0xb800
+   171 000000E7 8ED9                          mov ds,cx
+   172 000000E9 C606C20740                    mov byte [12*160 + 33*2],'@'       ;屏幕第12行，35列
+   173                                         
+   174                                   .idle:
+   175 000000EE F4                            hlt                                ;使CPU进入低功耗状态，直到用中断唤醒
+   176 000000EF F616C307                      not byte [12*160 + 33*2+1]         ;反转显示属性 
+   177 000000F3 EBF9                          jmp .idle
+   178                                  
+   179                                  ;-------------------------------------------------------------------------------
+   180                                  put_string:                              ;显示串(0结尾)。
+   181                                                                           ;输入：DS:BX=串地址
+   182 000000F5 8A0F                             mov cl,[bx]
+   183 000000F7 08C9                             or cl,cl                        ;cl=0 ?
+   184 000000F9 7406                             jz .exit                        ;是的，返回主程序 
+   185 000000FB E80400                           call put_char
+   186 000000FE 43                               inc bx                          ;下一个字符 
+   187 000000FF EBF4                             jmp put_string
+   188                                  
+   189                                     .exit:
+   190 00000101 C3                               ret
+   191                                  
+   192                                  ;-------------------------------------------------------------------------------
+   193                                  put_char:                                ;显示一个字符
+   194                                                                           ;输入：cl=字符ascii
+   195 00000102 50                               push ax
+   196 00000103 53                               push bx
+   197 00000104 51                               push cx
+   198 00000105 52                               push dx
+   199 00000106 1E                               push ds
+   200 00000107 06                               push es
+   201                                  
+   202                                           ;以下取当前光标位置
+   203 00000108 BAD403                           mov dx,0x3d4
+   204 0000010B B00E                             mov al,0x0e
+   205 0000010D EE                               out dx,al
+   206 0000010E BAD503                           mov dx,0x3d5
+   207 00000111 EC                               in al,dx                        ;高8位 
+   208 00000112 88C4                             mov ah,al
+   209                                  
+   210 00000114 BAD403                           mov dx,0x3d4
+   211 00000117 B00F                             mov al,0x0f
+   212 00000119 EE                               out dx,al
+   213 0000011A BAD503                           mov dx,0x3d5
+   214 0000011D EC                               in al,dx                        ;低8位 
+   215 0000011E 89C3                             mov bx,ax                       ;BX=代表光标位置的16位数
+   216                                  
+   217 00000120 80F90D                           cmp cl,0x0d                     ;回车符？
+   218 00000123 750C                             jnz .put_0a                     ;不是。看看是不是换行等字符 
+   219 00000125 89D8                             mov ax,bx                       ; 
+   220 00000127 B350                             mov bl,80                       
+   221 00000129 F6F3                             div bl
+   222 0000012B F6E3                             mul bl
+   223 0000012D 89C3                             mov bx,ax
+   224 0000012F EB45                             jmp .set_cursor
+   225                                  
+   226                                   .put_0a:
+   227 00000131 80F90A                           cmp cl,0x0a                     ;换行符？
+   228 00000134 7505                             jnz .put_other                  ;不是，那就正常显示字符 
+   229 00000136 83C350                           add bx,80
+   230 00000139 EB0F                             jmp .roll_screen
+   231                                  
+   232                                   .put_other:                             ;正常显示字符
+   233 0000013B B800B8                           mov ax,0xb800
+   234 0000013E 8EC0                             mov es,ax
+   235 00000140 D1E3                             shl bx,1
+   236 00000142 26880F                           mov [es:bx],cl
+   237                                  
+   238                                           ;以下将光标位置推进一个字符
+   239 00000145 D1EB                             shr bx,1
+   240 00000147 83C301                           add bx,1
+   241                                  
+   242                                   .roll_screen:
+   243 0000014A 81FBD007                         cmp bx,2000                     ;光标超出屏幕？滚屏
+   244 0000014E 7C26                             jl .set_cursor
+   245                                  
+   246 00000150 B800B8                           mov ax,0xb800
+   247 00000153 8ED8                             mov ds,ax
+   248 00000155 8EC0                             mov es,ax
+   249 00000157 FC                               cld
+   250 00000158 BEA000                           mov si,0xa0
+   251 0000015B BF0000                           mov di,0x00
+   252 0000015E B98007                           mov cx,1920
+   253 00000161 F3A5                             rep movsw
+   254 00000163 BB000F                           mov bx,3840                     ;清除屏幕最底一行
+   255 00000166 B95000                           mov cx,80
+   256                                   .cls:
+   257 00000169 26C7072007                       mov word[es:bx],0x0720
+   258 0000016E 83C302                           add bx,2
+   259 00000171 E2F6                             loop .cls
+   260                                  
+   261 00000173 BB8007                           mov bx,1920
+   262                                  
+   263                                   .set_cursor:
+   264 00000176 BAD403                           mov dx,0x3d4
+   265 00000179 B00E                             mov al,0x0e
+   266 0000017B EE                               out dx,al
+   267 0000017C BAD503                           mov dx,0x3d5
+   268 0000017F 88F8                             mov al,bh
+   269 00000181 EE                               out dx,al
+   270 00000182 BAD403                           mov dx,0x3d4
+   271 00000185 B00F                             mov al,0x0f
+   272 00000187 EE                               out dx,al
+   273 00000188 BAD503                           mov dx,0x3d5
+   274 0000018B 88D8                             mov al,bl
+   275 0000018D EE                               out dx,al
+   276                                  
+   277 0000018E 07                               pop es
+   278 0000018F 1F                               pop ds
+   279 00000190 5A                               pop dx
+   280 00000191 59                               pop cx
+   281 00000192 5B                               pop bx
+   282 00000193 58                               pop ax
+   283                                  
+   284 00000194 C3                               ret
+   285                                  
+   286                                  ;===============================================================================
+   287                                  SECTION data align=16 vstart=0
+   288                                  
+   289 00000000 5374617274696E672E-         init_msg       db 'Starting...',0x0d,0x0a,0
+   289 00000009 2E2E0D0A00         
+   290                                                     
+   291 0000000E 496E7374616C6C696E-         inst_msg       db 'Installing a new interrupt 70H...',0
+   291 00000017 672061206E65772069-
+   291 00000020 6E7465727275707420-
+   291 00000029 3730482E2E2E00     
+   292                                      
+   293 00000030 446F6E652E0D0A00            done_msg       db 'Done.',0x0d,0x0a,0
+   294                                  
+   295 00000038 436C6F636B20697320-         tips_msg       db 'Clock is now working.',0
+   295 00000041 6E6F7720776F726B69-
+   295 0000004A 6E672E00           
+   296                                                     
+   297                                  ;===============================================================================
+   298                                  SECTION stack align=16 vstart=0
+   299                                             
+   300 00000000 <res 00000100>                           resb 256
+   300          ******************       warning: uninitialized space declared in stack section: zeroing [-w+other]
+   301                                  ss_pointer:
+   302                                   
+   303                                  ;===============================================================================
+   304                                  SECTION program_trail
+   305                                  program_end:

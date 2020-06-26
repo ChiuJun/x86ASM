@@ -48,7 +48,7 @@ SECTION mbr align=16 vstart=0x7c00
          mov ds,ax  
                               
          xor bx,bx                       ;每次读时，偏移地址始终为0x0000 
-         inc si                          ;下一个逻辑扇区 
+         inc si                          ;下一个逻辑扇区;连续存放 
          call read_hard_disk_0
          loop @2                         ;循环读，直到读完整个功能程序 
 
